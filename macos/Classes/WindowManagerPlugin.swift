@@ -10,12 +10,12 @@ public class WindowManagerPlugin: NSObject, FlutterPlugin {
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
     
-    private var registrar: FlutterPluginRegistrar!;
+    private var registrar: FlutterPluginRegistrar!
     private var channel: FlutterMethodChannel!
     
     private var mainWindow: NSWindow {
         get {
-            return (self.registrar.view?.window)!;
+            return (self.registrar.view?.window)!
         }
     }
     
@@ -43,7 +43,9 @@ public class WindowManagerPlugin: NSObject, FlutterPlugin {
         let methodName: String = call.method
         let args: [String: Any] = call.arguments as? [String: Any] ?? [:]
         
-        switch (methodName) {
+        NSLog("window_manager Called method: %@", methodName)
+        
+        switch methodName {
         case "ensureInitialized":
             ensureInitialized()
             result(true)
@@ -272,6 +274,7 @@ public class WindowManagerPlugin: NSObject, FlutterPlugin {
         let args: NSDictionary = [
             "eventName": eventName,
         ]
+        NSLog("window_manager onEvent: %@", eventName)
         channel.invokeMethod("onEvent", arguments: args, result: nil)
     }
 }

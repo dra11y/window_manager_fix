@@ -216,9 +216,10 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
             PreferenceListItem(
               title: const Text('maximize / unmaximize'),
               onTap: () async {
-                windowManager.maximize();
-                await Future.delayed(const Duration(seconds: 2));
-                windowManager.unmaximize();
+                final isMaximized = await windowManager.isMaximized();
+                isMaximized
+                    ? await windowManager.unmaximize()
+                    : await windowManager.maximize();
               },
             ),
             PreferenceListItem(

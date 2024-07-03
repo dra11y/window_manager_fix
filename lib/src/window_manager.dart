@@ -95,9 +95,8 @@ class WindowManager {
   }
 
   double getDevicePixelRatio() {
-    // Subsequent version, remove this deprecated member.
-    // ignore: deprecated_member_use
-    return window.devicePixelRatio;
+    return WidgetsBinding
+        .instance.platformDispatcher.implicitView!.devicePixelRatio;
   }
 
   Future<void> ensureInitialized() async {
@@ -123,8 +122,8 @@ class WindowManager {
       );
     }
 
-    if (await isFullScreen()) await setFullScreen(false);
-    if (await isMaximized()) await unmaximize();
+    // if (await isFullScreen()) await setFullScreen(false);
+    // if (await isMaximized()) await unmaximize();
     if (await isMinimized()) await restore();
 
     if (options?.size != null) await setSize(options!.size!);

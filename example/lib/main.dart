@@ -7,6 +7,7 @@ import 'package:window_manager_example/utils/config.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+  await windowManager.show();
 
   WindowOptions windowOptions = const WindowOptions(
     size: Size(800, 600),
@@ -32,7 +33,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.system;
 
   @override
   void initState() {
@@ -59,6 +60,8 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
       builder: (context, child) {
         child = virtualWindowFrameBuilder(context, child);
         child = botToastBuilder(context, child);

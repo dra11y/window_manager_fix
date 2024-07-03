@@ -5,6 +5,7 @@ extension NSWindow {
     private struct AssociatedKeys {
         static var configured: Bool = false
     }
+    
     var configured: Bool {
         get {
             return objc_getAssociatedObject(self, &AssociatedKeys.configured) as? Bool ?? false
@@ -13,10 +14,14 @@ extension NSWindow {
             objc_setAssociatedObject(self, &AssociatedKeys.configured, value, objc_AssociationPolicy.OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
+    
     public func hiddenWindowAtLaunch() {
         if (!configured) {
-            setIsVisible(false)
-            configured = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.setIsVisible(false)
+                self.configured = true
+            }
         }
     }
     
@@ -68,25 +73,33 @@ public class WindowManager: NSObject, NSWindowDelegate {
     private var _isPreventClose: Bool = false
     private var _isMaximized: Bool = false
     private var _isMaximizable: Bool = true
+    // Default duration: 0.35 seconds
+    // https://www.kodeco.com/books/ios-animations-by-tutorials/v6.0/chapters/1-introduction-to-animations-with-swiftui
+    private var _animationDuration: Double = 0.35
+    
+    private var _windowSemaphore = DispatchSemaphore(value: 1)
+    private var _animationSemaphore = DispatchSemaphore(value: 1)
     
     override public init() {
         super.init()
     }
     
     public func waitUntilReadyToShow() {
-        // nothing
+        NSLog("waitUntilReadyToShow()")
     }
     
     public func setAsFrameless() {
-        mainWindow.styleMask.insert(.fullSizeContentView)
-        mainWindow.titleVisibility = .hidden
-        mainWindow.isOpaque = true
-        mainWindow.hasShadow = false
-        mainWindow.backgroundColor = NSColor.clear
-        
-        if (mainWindow.styleMask.contains(.titled)) {
-            let titleBarView: NSView = (mainWindow.standardWindowButton(.closeButton)?.superview)!.superview!
-            titleBarView.isHidden = true
+        withWeakWindowAsync { mainWindow in
+            mainWindow.styleMask.insert(.fullSizeContentView)
+            mainWindow.titleVisibility = .hidden
+            mainWindow.isOpaque = true
+            mainWindow.hasShadow = false
+            mainWindow.backgroundColor = NSColor.clear
+            
+            if (mainWindow.styleMask.contains(.titled)) {
+                let titleBarView: NSView = (mainWindow.standardWindowButton(.closeButton)?.superview)!.superview!
+                titleBarView.isHidden = true
+            }
         }
     }
     
@@ -95,11 +108,13 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func close() {
-        mainWindow.performClose(nil)
+        withWeakWindowAsync { window in
+            window.performClose(nil)
+        }
     }
     
     public func isPreventClose() -> Bool {
-        return _isPreventClose;
+        return _isPreventClose
     }
     
     public func setPreventClose(_ args: [String: Any]) {
@@ -107,7 +122,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func isMaximizable() -> Bool {
-        return _isMaximizable;
+        return _isMaximizable
     }
     
     public func setIsMaximizable(_ args: [String: Any]) {
@@ -115,12 +130,16 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func focus() {
-        NSApp.activate(ignoringOtherApps: false)
-        mainWindow.makeKeyAndOrderFront(nil)
+        withWeakWindowAsync { window in
+            NSApp.activate(ignoringOtherApps: false)
+            window.makeKeyAndOrderFront(nil)
+        }
     }
     
     public func blur() {
-        mainWindow.orderBack(nil)
+        withWeakWindowAsync { window in
+            window.orderBack(nil)
+        }
     }
     
     public func isFocused() -> Bool {
@@ -128,16 +147,17 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func show() {
-        mainWindow.setIsVisible(true)
-        DispatchQueue.main.async {
-            self.mainWindow.makeKeyAndOrderFront(nil)
+        withWeakWindowAsync { window in
+            if (!window.isVisible) {            window.setIsVisible(true)
+            }
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
     }
     
     public func hide() {
-        DispatchQueue.main.async {
-            self.mainWindow.orderOut(nil)
+        withWeakWindowAsync { window in
+            window.orderOut(nil)
         }
     }
     
@@ -149,15 +169,60 @@ public class WindowManager: NSObject, NSWindowDelegate {
         return mainWindow.isZoomed
     }
     
+    private func withWeakWindowAsync(_ method: @escaping (_ window: NSWindow) -> Void) {
+        _windowSemaphore.wait()
+        NSLog("with weak window async...")
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            NSLog("calling method...")
+            method(self.mainWindow)
+            print("called method, sending signal...")
+            self._windowSemaphore.signal()
+            NSLog("window async done.")
+        }
+    }
+    
+    private func withAnimation(animate: Bool = true, _ method: @escaping (_ window: NSWindow) -> Void) {
+        
+        _animationSemaphore.wait()
+        
+        NSLog("Run with animation... %@", animate.description)
+        if !animate || _animationDuration == 0 {
+            withWeakWindowAsync { window in
+                method(window)
+            }
+            return
+        }
+        
+        NSAnimationContext.runAnimationGroup { [weak self] context in
+            guard let self = self else { return }
+            context.allowsImplicitAnimation = true
+            context.duration = self._animationDuration
+            
+            NSLog("Running with animation...")
+            
+            withWeakWindowAsync { [weak self] window in
+                method(window)
+                self?._animationSemaphore.signal()
+                NSLog("Animation complete.")
+            }
+        }
+    }
+    
     public func maximize() {
         if (!isMaximized()) {
-            mainWindow.zoom(nil);
+            withAnimation { window in
+                window.zoom(nil)
+            }
         }
     }
     
     public func unmaximize() {
         if (isMaximized()) {
-            mainWindow.zoom(nil);
+            withAnimation { window in
+                window.zoom(nil)
+            }
         }
     }
     
@@ -166,11 +231,15 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func minimize() {
-        mainWindow.miniaturize(nil)
+        withAnimation { window in
+            window.miniaturize(nil)
+        }
     }
     
     public func restore() {
-        mainWindow.deminiaturize(nil)
+        withAnimation { window in
+            window.deminiaturize(nil)
+        }
     }
 
     public func isDockable() -> Bool {
@@ -178,7 +247,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
 
     public func isDocked() -> Int {
-        return 0;
+        return 0
     }
     
     public func dock(_ args: [String: Any]) {
@@ -196,31 +265,32 @@ public class WindowManager: NSObject, NSWindowDelegate {
     public func setFullScreen(_ args: [String: Any]) {
         let isFullScreen: Bool = args["isFullScreen"] as! Bool
         
-        if (isFullScreen) {
-            if (!mainWindow.styleMask.contains(.fullScreen)) {
-                mainWindow.toggleFullScreen(nil)
-            }
-        } else {
-            if (mainWindow.styleMask.contains(.fullScreen)) {
-                mainWindow.toggleFullScreen(nil)
+        withAnimation { window in
+            window.collectionBehavior.insert(.fullScreenPrimary)
+            if isFullScreen != window.styleMask.contains(.fullScreen) {
+                window.toggleFullScreen(nil)
             }
         }
     }
     
     public func setAspectRatio(_ args: [String: Any]) {
-        let hasFrame = !mainWindow.styleMask.contains(.fullSizeContentView);
+        let hasFrame = !mainWindow.styleMask.contains(.fullSizeContentView)
         let aspectRatio = (args["aspectRatio"] as! NSNumber).doubleValue
         
         // Reset the behaviour to default if aspect_ratio is set to 0 or less.
-        if (aspectRatio > 0.0) {
+        withAnimation { mainWindow in
+            if (aspectRatio <= 0) {
+                mainWindow.resizeIncrements = NSMakeSize(1.0, 1.0)
+                return
+            }
+            
             let aspectRatioSize: NSSize = NSMakeSize(CGFloat(aspectRatio), 1.0)
+            
             if (hasFrame) {
                 mainWindow.contentAspectRatio = aspectRatioSize
             } else {
-                mainWindow.aspectRatio = aspectRatioSize;
+                mainWindow.aspectRatio = aspectRatioSize
             }
-        } else {
-            mainWindow.resizeIncrements = NSMakeSize(1.0, 1.0)
         }
     }
     
@@ -233,25 +303,28 @@ public class WindowManager: NSObject, NSWindowDelegate {
         let isTransparent: Bool = backgroundColorA == 0
         && backgroundColorR == 0
         && backgroundColorG == 0
-        && backgroundColorB == 0;
+        && backgroundColorB == 0
         
-        if (isTransparent) {
-            mainWindow.backgroundColor = NSColor.clear
-        } else {
-            let rgbR = CGFloat(backgroundColorR) / 255
-            let rgbG = CGFloat(backgroundColorG) / 255
-            let rgbB = CGFloat(backgroundColorB) / 255
-            let rgbA = CGFloat(backgroundColorA) / 255
-            
-            mainWindow.backgroundColor = NSColor(red: rgbR,
-                                                 green: rgbG,
-                                                 blue: rgbB,
-                                                 alpha: rgbA)
+        withAnimation { mainWindow in
+            if (isTransparent) {
+                mainWindow.backgroundColor = NSColor.clear
+            } else {
+                let rgbR = CGFloat(backgroundColorR) / 255
+                let rgbG = CGFloat(backgroundColorG) / 255
+                let rgbB = CGFloat(backgroundColorB) / 255
+                let rgbA = CGFloat(backgroundColorA) / 255
+                
+                mainWindow.backgroundColor = NSColor(
+                    red: rgbR,
+                    green: rgbG,
+                    blue: rgbB,
+                    alpha: rgbA)
+            }
         }
     }
     
     public func getBounds() -> NSDictionary {
-        let frameRect: NSRect = mainWindow.frame;
+        let frameRect: NSRect = mainWindow.frame
         
         let data: NSDictionary = [
             "x": frameRect.topLeft.x,
@@ -259,7 +332,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
             "width": frameRect.size.width,
             "height": frameRect.size.height,
         ]
-        return data;
+        return data
     }
     
     public func setBounds(_ args: [String: Any]) {
@@ -280,10 +353,8 @@ public class WindowManager: NSObject, NSWindowDelegate {
             frameRect.topLeft.y = CGFloat(truncating: args["y"] as! NSNumber)
         }
         
-        if (animate) {
-            mainWindow.animator().setFrame(frameRect, display: true, animate: true)
-        } else {
-            mainWindow.setFrame(frameRect, display: true)
+        withAnimation(animate: animate) { window in
+            window.setFrame(frameRect, display: true)
         }
     }
     
@@ -292,7 +363,10 @@ public class WindowManager: NSObject, NSWindowDelegate {
             width: CGFloat((args["width"] as! NSNumber).floatValue),
             height: CGFloat((args["height"] as! NSNumber).floatValue)
         )
-        mainWindow.minSize = minSize
+
+        withAnimation { window in
+            window.minSize = minSize
+        }
     }
     
     public func setMaximumSize(_ args: [String: Any]) {
@@ -300,7 +374,10 @@ public class WindowManager: NSObject, NSWindowDelegate {
             width: CGFloat((args["width"] as! NSNumber).floatValue),
             height: CGFloat((args["height"] as! NSNumber).floatValue)
         )
-        mainWindow.maxSize = maxSize
+        
+        withAnimation { window in
+            window.maxSize = maxSize
+        }
     }
     
     public func isResizable() -> Bool {
@@ -309,10 +386,13 @@ public class WindowManager: NSObject, NSWindowDelegate {
     
     public func setResizable(_ args: [String: Any]) {
         let isResizable: Bool = args["isResizable"] as! Bool
-        if (isResizable) {
-            mainWindow.styleMask.insert(.resizable)
-        } else {
-            mainWindow.styleMask.remove(.resizable)
+        
+        withAnimation { window in
+            if (isResizable) {
+                window.styleMask.insert(.resizable)
+            } else {
+                window.styleMask.remove(.resizable)
+            }
         }
     }
     
@@ -369,7 +449,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
     
     public func setTitle(_ args: [String: Any]) {
         let title: String = args["title"] as! String
-        mainWindow.title = title;
+        mainWindow.title = title
     }
     
     public func setTitleBarStyle(_ args: [String: Any]) {
@@ -398,7 +478,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func getTitleBarHeight() -> Int {
-        let frame = mainWindow.frame;
+        let frame = mainWindow.frame
         let windowHeight: CGFloat = mainWindow.frame.height
         return Int(windowHeight - mainWindow.contentRect(forFrameRect: frame).height)
     }
@@ -420,7 +500,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
     public func setProgressBar(_ args: [String: Any]) {
         let progress: CGFloat = CGFloat(truncating: args["progress"] as! NSNumber)
         
-        let dockTile: NSDockTile = NSApp.dockTile;
+        let dockTile: NSDockTile = NSApp.dockTile
         
         let firstTime = dockTile.contentView == nil || dockTile.contentView?.subviews.count == 0
         
@@ -463,7 +543,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
         let visibleOnFullScreen: Bool = args["visibleOnFullScreen"] as! Bool
         
         mainWindow.setCollectionBehavior(visible, .canJoinAllSpaces)
-        mainWindow.setCollectionBehavior(visibleOnFullScreen, .fullScreenAuxiliary)
+        mainWindow.setCollectionBehavior(visibleOnFullScreen, .fullScreenPrimary)
     }
     
     public func hasShadow() -> Bool {
@@ -472,8 +552,8 @@ public class WindowManager: NSObject, NSWindowDelegate {
     
     public func setHasShadow(_ args: [String: Any]) {
         let hasShadow: Bool = args["hasShadow"] as! Bool
-        mainWindow.hasShadow = hasShadow;
-        mainWindow.invalidateShadow();
+        mainWindow.hasShadow = hasShadow
+        mainWindow.invalidateShadow()
     }
     
     public func getOpacity() -> CGFloat {
@@ -508,10 +588,10 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func startDragging() {
-        DispatchQueue.main.async {
-            let window: NSWindow  = self.mainWindow
-            if(window.currentEvent != nil) {
-                window.performDrag(with: window.currentEvent!)
+        if !isMovable() { return }
+        withWeakWindowAsync { window in
+            if let currentEvent = window.currentEvent {
+                window.performDrag(with: currentEvent)
             }
         }
     }
@@ -523,7 +603,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
         if (isPreventClose()) {
             return false
         }
-        return true;
+        return true
     }
     
     public func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
@@ -531,7 +611,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
         if (isMaximizable()) {
             return true
         }
-        return false;
+        return false
     }
     
     public func windowDidResize(_ notification: Notification) {
@@ -560,43 +640,41 @@ public class WindowManager: NSObject, NSWindowDelegate {
     
     public func windowDidBecomeKey(_ notification: Notification) {
         if (mainWindow is NSPanel) {
-            _emitEvent("focus");
+            _emitEvent("focus")
         }
     }
     
     public func windowDidResignKey(_ notification: Notification) {
         if (mainWindow is NSPanel) {
-            _emitEvent("blur");
+            _emitEvent("blur")
         }
     }
     
     public func windowDidBecomeMain(_ notification: Notification) {
-        _emitEvent("focus");
+        _emitEvent("focus")
     }
     
     public func windowDidResignMain(_ notification: Notification){
-        _emitEvent("blur");
+        _emitEvent("blur")
     }
     
     public func windowDidMiniaturize(_ notification: Notification) {
-        _emitEvent("minimize");
+        _emitEvent("minimize")
     }
     
     public func windowDidDeminiaturize(_ notification: Notification) {
-        _emitEvent("restore");
+        _emitEvent("restore")
     }
     
     public func windowDidEnterFullScreen(_ notification: Notification){
-        _emitEvent("enter-full-screen");
+        _emitEvent("enter-full-screen")
     }
     
     public func windowDidExitFullScreen(_ notification: Notification){
-        _emitEvent("leave-full-screen");
+        _emitEvent("leave-full-screen")
     }
     
     public func _emitEvent(_ eventName: String) {
-        if (onEvent != nil) {
-            onEvent!(eventName)
-        }
+        onEvent?(eventName)
     }
 }
