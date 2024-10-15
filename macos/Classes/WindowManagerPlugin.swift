@@ -43,8 +43,6 @@ public class WindowManagerPlugin: NSObject, FlutterPlugin {
         let methodName: String = call.method
         let args: [String: Any] = call.arguments as? [String: Any] ?? [:]
         
-        NSLog("window_manager Called method: %@", methodName)
-        
         switch methodName {
         case "ensureInitialized":
             ensureInitialized()
@@ -274,7 +272,6 @@ public class WindowManagerPlugin: NSObject, FlutterPlugin {
         let args: NSDictionary = [
             "eventName": eventName,
         ]
-        NSLog("window_manager onEvent: %@", eventName)
         channel.invokeMethod("onEvent", arguments: args, result: nil)
     }
 }

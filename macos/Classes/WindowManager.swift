@@ -85,7 +85,7 @@ public class WindowManager: NSObject, NSWindowDelegate {
     }
     
     public func waitUntilReadyToShow() {
-        NSLog("waitUntilReadyToShow()")
+        // do nothing
     }
     
     public func setAsFrameless() {
@@ -171,15 +171,11 @@ public class WindowManager: NSObject, NSWindowDelegate {
     
     private func withWeakWindowAsync(_ method: @escaping (_ window: NSWindow) -> Void) {
         _windowSemaphore.wait()
-        NSLog("with weak window async...")
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            NSLog("calling method...")
             method(self.mainWindow)
-            print("called method, sending signal...")
             self._windowSemaphore.signal()
-            NSLog("window async done.")
         }
     }
     
@@ -187,7 +183,6 @@ public class WindowManager: NSObject, NSWindowDelegate {
         
         _animationSemaphore.wait()
         
-        NSLog("Run with animation... %@", animate.description)
         if !animate || _animationDuration == 0 {
             withWeakWindowAsync { window in
                 method(window)
@@ -200,12 +195,9 @@ public class WindowManager: NSObject, NSWindowDelegate {
             context.allowsImplicitAnimation = true
             context.duration = self._animationDuration
             
-            NSLog("Running with animation...")
-            
             withWeakWindowAsync { [weak self] window in
                 method(window)
                 self?._animationSemaphore.signal()
-                NSLog("Animation complete.")
             }
         }
     }

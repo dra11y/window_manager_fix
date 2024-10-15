@@ -172,11 +172,9 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
               onTap: () async {
                 await windowManager.blur();
                 await Future.delayed(const Duration(seconds: 2));
-                print('isFocused: ${await windowManager.isFocused()}');
                 await Future.delayed(const Duration(seconds: 2));
                 await windowManager.focus();
                 await Future.delayed(const Duration(seconds: 2));
-                print('isFocused: ${await windowManager.isFocused()}');
               },
             ),
             PreferenceListItem(
@@ -199,7 +197,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
                 await Future.delayed(const Duration(seconds: 2));
                 windowManager.hide();
                 isVisible = await windowManager.isVisible();
-                print('isVisible: $isVisible');
                 await Future.delayed(const Duration(seconds: 2));
                 windowManager.show();
               },
@@ -234,7 +231,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
                 windowManager.minimize();
                 await Future.delayed(const Duration(seconds: 2));
                 isMinimized = await windowManager.isMinimized();
-                print('isMinimized: $isMinimized');
                 windowManager.restore();
               },
             ),
@@ -624,7 +620,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
               onChanged: (newValue) async {
                 await windowManager.setMinimizable(newValue);
                 _isMinimizable = await windowManager.isMinimizable();
-                print('isMinimizable: $_isMinimizable');
                 setState(() {});
               },
             ),
@@ -639,7 +634,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
               onChanged: (newValue) async {
                 await windowManager.setMaximizable(newValue);
                 _isMaximizable = await windowManager.isMaximizable();
-                print('isMaximizable: $_isMaximizable');
                 setState(() {});
               },
             ),
@@ -654,7 +648,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
               onChanged: (newValue) async {
                 await windowManager.setClosable(newValue);
                 _isClosable = await windowManager.isClosable();
-                print('isClosable: $_isClosable');
                 setState(() {});
               },
             ),
@@ -760,7 +753,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
                   setState(() {
                     _progress = i / 100;
                   });
-                  print(_progress);
                   await windowManager.setProgressBar(_progress);
                   await Future.delayed(const Duration(milliseconds: 100));
                 }
@@ -1076,6 +1068,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
 
   @override
   void onWindowEvent(String eventName) {
-    print('[WindowManager] onWindowEvent: $eventName');
+    // print('[WindowManager] onWindowEvent: $eventName');
   }
 }
