@@ -956,6 +956,22 @@ static void method_call_cb(FlMethodChannel* channel,
   window_manager_plugin_handle_method_call(plugin, method_call);
 }
 
+static void platform_method_call_cb(FlMethodChannel* channel,
+                                     FlMethodCall* method_call,
+                                     gpointer user_data) {
+  WindowManagerPlugin* plugin = WINDOW_MANAGER_PLUGIN(user_data);
+  if (g_strcmp0(fl_method_call_get_name(method_call), "SystemNavigator.pop") == 0) {
+    plugin->_is_prevent_close = false;
+    gtk_window_close(get_window(plugin));
+    fl_method_call_respond(method_call,
+        FL_METHOD_RESPONSE(fl_method_success_response_new(fl_value_new_bool(true))),
+        nullptr);
+    return;
+  }
+  fl_method_call_respond(method_call,
+      FL_METHOD_RESPONSE(fl_method_not_implemented_response_new()), nullptr);
+}
+
 void _emit_event(WindowManagerPlugin* plugin, const char* event_name) {
   g_autoptr(FlValue) result_data = fl_value_new_map();
   fl_value_set_string_take(result_data, "eventName",
@@ -966,7 +982,9 @@ void _emit_event(WindowManagerPlugin* plugin, const char* event_name) {
 
 gboolean on_window_close(GtkWidget* widget, GdkEvent* event, gpointer data) {
   WindowManagerPlugin* plugin = WINDOW_MANAGER_PLUGIN(data);
-  _emit_event(plugin, "close");
+  if (plugin->_is_prevent_close) {
+    _emit_event(plugin, "close");
+  }
   return plugin->_is_prevent_close;
 }
 
@@ -1131,6 +1149,15 @@ void window_manager_plugin_register_with_registrar(
                             "window_manager", FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       plugin->channel, method_call_cb, g_object_ref(plugin), g_object_unref);
+
+  g_autoptr(FlJsonMethodCodec) platform_codec = fl_json_method_codec_new();
+  FlMethodChannel* platform_channel = fl_method_channel_new(
+      fl_plugin_registrar_get_messenger(registrar),
+      "flutter/platform",
+      FL_METHOD_CODEC(platform_codec));
+  fl_method_channel_set_method_call_handler(
+      platform_channel, platform_method_call_cb,
+      g_object_ref(plugin), g_object_unref);
 
   g_object_unref(plugin);
 }
